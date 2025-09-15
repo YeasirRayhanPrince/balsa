@@ -22,7 +22,11 @@ import numpy as np
 
 from balsa.util import simple_sql_parser
 
-
+#############################################################################
+################# Query Plan Node Definitions ###############################
+#############################################################################
+#############################################################################
+#############################################################################
 class Node(object):
     """Basic AST node class.
 
@@ -315,6 +319,35 @@ class Node(object):
             atoms = [leading]  # Join order hint only.
         query_hint = '\n '.join(atoms)
         return '/*+ ' + query_hint + ' */'
+
+    def print_tree(self, prefix="", is_last=True):
+        """Print node in a tree-like format with detailed information."""
+        connector = "└── " if is_last else "├── "
+        
+        # Build the main node info
+        node_info = f"{self.node_type}"
+        
+        # Add table information if it's a scan
+        if self.table_name:
+            table_info = f"table={self.table_name}"
+            if self.table_alias:
+                table_info += f" alias={self.table_alias}"
+            node_info += f" [{table_info}]"
+        
+        # Add cost information
+        node_info += f" cost={self.cost}"
+        
+        # Add actual execution time if available
+        if self.actual_time_ms is not None:
+            node_info += f" actual_time={self.actual_time_ms}ms"
+        
+        print(f"{prefix}{connector}{node_info}")
+
+        child_prefix = prefix + ("    " if is_last else "│   ")
+
+        for i, child in enumerate(self.children):
+            is_last_child = (i == len(self.children) - 1)
+            child.print_tree(child_prefix, is_last_child)
 
     def __str__(self):
         return self.to_str()

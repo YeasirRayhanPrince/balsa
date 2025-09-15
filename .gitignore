@@ -18,4 +18,14 @@ data/initial_policy_data.pkl
 *.csv
 *.log
 
+
 logs/**/*.pdf
+
+lightning_logs/*
+
+# Generated documentation files
+function_invocation_diagram.md
+tensorboard_logs/
+tensorboard_logs_/
+balsa_jobrandsplit_analysis.md
+*.txt

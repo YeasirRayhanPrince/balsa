@@ -518,7 +518,11 @@ class Sim(object):
         # Plumb through same flags.
         p.search.plan_physical_ops = p.plan_physical
         p.search.cost_model.cost_physical_ops = p.plan_physical
+        print("---------- SIM PARAMS ----------")
         logging.info(p)
+        print("-----------------------------------")
+        print("-----------------------------------")
+        print("-----------------------------------")
 
         # Instantiate search.
         self.search = p.search.cls(p.search)
@@ -539,6 +543,7 @@ class Sim(object):
             self.search.SetPhysicalOps(join_ops=generic_join,
                                        scan_ops=generic_scan)
 
+        
         # A list of SubplanGoalCost.
         self.simulation_data = []
 
@@ -548,18 +553,27 @@ class Sim(object):
         self.all_nodes = self.workload.Queries(split='all')
         self.train_nodes = self.workload.Queries(split='train')
         self.test_nodes = self.workload.Queries(split='test')
+        
+        print("---------- WORKLOAD INFO ----------")
+        # These are the same as the p.stuff from the root 
         logging.info('{} train queries: {}'.format(
             len(self.train_nodes),
             [node.info['query_name'] for node in self.train_nodes]))
         logging.info('{} test queries: {}'.format(
             len(self.test_nodes),
             [node.info['query_name'] for node in self.test_nodes]))
-
+        print("-----------------------------------")
+        print("-----------------------------------")
+        print("-----------------------------------")
+        
+        # Physical --> Join
         plans_lib.RewriteAsGenericJoinsScans(self.all_nodes)
+        
 
         # This call ensures that node.info['all_filters_est_rows'] is written,
         # which is used by the query featurizer.
         experience.SimpleReplayBuffer(self.all_nodes)
+        
 
     def IsPlanPhysicalButUseGenericOps(self):
         p = self.params
@@ -651,9 +665,16 @@ class Sim(object):
             return False
         logging.info('Loaded simulation data (len {}) from: {}'.format(
             len(self.simulation_data), path))
-        logging.info('Training data (first 50, total {}):'.format(
+        logging.info('Training data (random 50 samples, total {}):'.format(
             len(self.simulation_data)))
-        logging.info('\n'.join(map(str, self.simulation_data[:50])))
+        
+        # Randomly sample 50 indices from simulation_data
+        # import random
+        # sample_size = min(50, len(self.simulation_data))
+        # random_indices = random.sample(range(len(self.simulation_data)), sample_size)
+        # random_samples = [self.simulation_data[i] for i in sorted(random_indices)]
+        # logging.info('\n'.join(map(str, random_samples)))
+        
         return True
 
     def _SaveSimulationData(self):
@@ -815,9 +836,24 @@ class Sim(object):
         df.to_csv(path, index=False, header=True)
 
     def _FeaturizeTrainingData(self, try_load=True):
-        """Pre-processes/featurizes simulation data into tensors."""
+        logging.info("\n")
+        logging.info("****************************************************************************************")
+        logging.info("*************************** NOW YOU HAVE THE SIMULATION DATA ***************************")
+        logging.info("*************************** NEXT STEP: FEATURIZE IT          ***************************")
+        logging.info("****************************************************************************************")
+        logging.info("\n")
+        """
+        Pre-processes/featurizes simulation data into tensors.
+        """
+        
         p = self.params
+        logging.info("--------------------------- Params ---------------------------")
+        logging.info(p)
+        logging.info("--------------------------------------------------------------")
+        
+        logging.info("--------------------------- Workload ---------------------------")
         wi = self.workload.workload_info.Copy()
+        
         if not p.plan_physical:
             # This original WorkloadInfo has all physical ops, but during
             # learning the training data would only have all sort of scans plus
@@ -827,14 +863,29 @@ class Sim(object):
             wi.all_ops = np.sort(np.concatenate((wi.all_ops, ['Join', 'Scan'])))
             wi.join_types = np.sort(np.concatenate((wi.join_types, ['Join'])))
             wi.scan_types = np.sort(np.concatenate((wi.scan_types, ['Scan'])))
+        
         wi.table_num_rows = postgres.GetAllTableNumRows(wi.rel_names)
         self.training_workload_info = wi
-
+        
+        logging.info(wi)
+        logging.info("--------------------------------------------------------------")
+        """
+        An example workload:
+        rel_names:['aka_name']
+        rel_ids: ['aka_name AS a1', 'aka_name AS an', 'aka_name AS an1']
+        scan_types: ['Index Only Scan' 'Index Scan' 'Seq Scan']
+        join_types: ['Hash Join' 'Merge Join' 'Nested Loop']
+        all_ops: ['FinalizeAggregate']
+        all_attributes: ['an.name' 'cct1.kind' 'cct2.kind']
+        """
+        
+        
         # Instantiate query featurizer once with train nodes, since it may need
         # to calculate normalization statistics.
         self.query_featurizer = p.query_featurizer_cls(wi)
         self.query_featurizer.Fit(self.workload.Queries(split='train'))
 
+        # First try to check if featurized data exists or not, then load the featurized data
         if try_load:
             done, data = self._LoadFeaturizedData()
             if done:
@@ -843,11 +894,20 @@ class Sim(object):
         if not self.simulation_data:
             self.CollectSimulationData(try_load)
 
+        logging.info("----------------------------------------------------------------------")
         logging.info('Creating SimpleReplayBuffer')
+       
         # The constructor of SRB realy only needs goal/query Nodes for
         # instantiating workload info metadata and featurizers (e.g., grab all
         # table names).
         goals = [p.goal for p in self.simulation_data]
+        """
+        An example goal:
+        Hash Join cost=6164525
+            Index Scan [title AS t] cost=43898.72
+            Index Scan [movie_companies AS mc] cost=27206.55
+        """       
+
         exp = experience.SimpleReplayBuffer(
             goals,
             workload_info=wi,  # Pass this in to significantly speed up ctor.
@@ -857,11 +917,17 @@ class Sim(object):
             # <Scan types>} only.
             keep_scans_joins_only=False,
         )
+        logging.info("----------------------------------------------------------------------")
+
+        
+        exit(0) #= 5
+        logging.info("----------------------------------------------------------------------")
         logging.info('featurize_with_subplans()')
         data = exp.featurize_with_subplans(
             subplans=[p.subplan for p in self.simulation_data],
             rewrite_generic=not p.plan_physical)
-
+        logging.info("----------------------------------------------------------------------")
+        
         if try_load:
             self._SaveFeaturizedData(data)
         return data
@@ -947,8 +1013,14 @@ class Sim(object):
         p = self.params
         # Pre-process and featurize data.
         data = train_data
+        
         if data is None:
+            print("*************************** This is where the featurization happens ***************************")
+            print("No training data provided, featurizing training data")
             data = self._FeaturizeTrainingData()
+            print("*************************** This is where the featurization happens ***************************")
+
+        exit(0) #= 4
 
         # Make the DataLoader.
         logging.info('_MakeDatasetAndLoader()')

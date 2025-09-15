@@ -339,49 +339,80 @@ def _GetQueryFeaturizerClass(p):
         'SimQueryFeaturizerV4': sim_lib.SimQueryFeaturizerV4,
     }[p.sim_query_featurizer]
 
-
+####################################################################################################################################
+################################################## This is another important part ##################################################
+####################################################################################################################################
+####################################################################################################################################
 def TrainSim(p, loggers=None):
+    print("###################### ENTRYPOINT: Training SIM ######################")
+    print("#######################################################################")
     sim_p = sim_lib.Sim.Params()
+    
     # Copy over relevant params.
-    sim_p.workload.query_dir = p.query_dir
+    sim_p.workload.query_dir = p.query_dir 
     sim_p.workload.query_glob = p.query_glob
     sim_p.workload.test_query_glob = p.test_query_glob
-    sim_p.workload.search_space_join_ops = p.search_space_join_ops
-    sim_p.workload.search_space_scan_ops = p.search_space_scan_ops
+    sim_p.workload.search_space_join_ops = p.search_space_join_ops  # ['Hash Join', 'Merge Join', 'Nested Loop']
+    sim_p.workload.search_space_scan_ops = p.search_space_scan_ops  # ['Index Scan', 'Index Only Scan', 'Seq Scan']
     sim_p.skip_data_collection_geq_num_rels = 12
+    
     if p.cost_model == 'mincardcost':
         sim_p.search.cost_model = costing.MinCardCost.Params()
     else:
         sim_p.search.cost_model = costing.PostgresCost.Params()
+    
+
     sim_p.query_featurizer_cls = _GetQueryFeaturizerClass(p)
     sim_p.plan_featurizer_cls = plans_lib.TreeNodeFeaturizer
+    
     sim_p.infer_search_method = p.search_method
     sim_p.infer_beam_size = p.beam
     sim_p.infer_search_until_n_complete_plans = p.search_until_n_complete_plans
+    
     if p.plan_physical:
         sim_p.plan_physical = True
         # Use a physical-aware plan featurizer.
         sim_p.plan_featurizer_cls = plans_lib.PhysicalTreeNodeFeaturizer
+    
+
     sim_p.generic_ops_only_for_min_card_cost = \
         p.generic_ops_only_for_min_card_cost
     sim_p.label_transforms = p.label_transforms
     sim_p.tree_conv_version = p.tree_conv_version
     sim_p.loss_type = p.loss_type
+    
     sim_p.gradient_clip_val = p.gradient_clip_val
     sim_p.bs = p.bs
     sim_p.epochs = p.epochs
     sim_p.perturb_query_features = p.perturb_query_features
     sim_p.validate_fraction = p.validate_fraction
+    
 
     # Instantiate.
+    # This is prepworsk: It collects all the info needed for all the queries in the dataset
     sim = sim_lib.Sim(sim_p)
+    
     if p.sim_checkpoint is None:
         sim.CollectSimulationData()
+    
+    print("-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------")
+    print("-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------")
+    print("--------------------------------------------------------------------------------------------I AM HERE--------------------------------------------------------------------------------------------")
+    print("-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------")
+    print("-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------")
     sim.Train(load_from_checkpoint=p.sim_checkpoint, loggers=loggers)
+    
+    exit(0) #= 3
+
     sim.model.freeze()
     sim.EvaluateCost()
     sim.FreeData()
     return sim
+
+####################################################################################################################################
+####################################################################################################################################
+####################################################################################################################################
+####################################################################################################################################
 
 
 def InitializeModel(p,
@@ -669,18 +700,26 @@ class BalsaAgent(object):
     def __init__(self, params):
         self.params = params.Copy()
         p = self.params
-        print('BalsaAgent params:\n{}'.format(p))
-
+        
+        """
+            The simulator provides the
+            "environment" where the agent can explore different plans, evaluate their
+            costs, and learn from the results - all without the overhead of actually
+            executing queries on a real database.
+        """
         self.sim = None
-        self.ema_source_net = None
+
+        self.ema_source_net = None  # It maintains a smoothed version of network weights across training iterations using exponential moving average
         self.timeout_controller = execution.PerQueryTimeoutController(
             timeout_slack=p.timeout_slack,
             no_op=not p.use_timeout,
             relax_timeout_factor=p.relax_timeout_factor,
             relax_timeout_on_n_timeout_iters=p.relax_timeout_on_n_timeout_iters,
             initial_timeout_ms=p.initial_timeout_ms)
-        self.query_execution_cache = execution.QueryExecutionCache()
-        self.best_plans = execution.QueryExecutionCache()
+        # Query Caches
+        self.query_execution_cache = execution.QueryExecutionCache() # Stores executed queries and results
+        self.best_plans = execution.QueryExecutionCache()  # Stores the best plan found so far for each query
+        
         self.trainer = None
         self.loggers = None
 
@@ -718,8 +757,17 @@ class BalsaAgent(object):
                   'likely indicating issues with the cluster.\nTry running '
                   '1 run only and see if tasks go through or get stuck.'
                   '  Exception:\n   {}'.format(e))
+        
         # Workload.
+        """
+        Purpose: Sets up the collection of SQL queries that the optimizer will learn
+        to optimize.
+        """
+        print("###################### Workload ######################")
         self.workload = self._MakeWorkload()
+        print("######################################################")
+        
+
         self.all_nodes = self.workload.Queries(split='all')
         self.train_nodes = self.workload.Queries(split='train')
         self.test_nodes = self.workload.Queries(split='test')
@@ -729,14 +777,20 @@ class BalsaAgent(object):
               [node.info['query_name'] for node in self.test_nodes])
         if p.test_query_glob is None:
             print('Consider all queries as training nodes.')
+        
         # Rewrite ops if physical plan is not used.
+        # All scan types (SeqScan, IndexScan, etc.) → 'Scan'
+        # All join types (HashJoin, NestLoop, etc.) → 'Join'
+        # Set to True during JobRandSplit
         if not p.plan_physical:
             plans_lib.RewriteAsGenericJoinsScans(self.all_nodes)
+        
         # If the target engine has a dialect != Postgres, overwrite
         # node.info['sql_str'] with the dialected SQL.
         if p.engine_dialect_query_dir is not None:
             self.workload.UseDialectSql(p)
 
+        
         # Unused.
         assert p.use_adaptive_lr is None
         self.adaptive_lr_schedule = None
@@ -748,16 +802,29 @@ class BalsaAgent(object):
                     total_steps=p.val_iters))
 
         # Logging.
+        print("###################### Logging ######################")
         self._InitLogging()
         self.timer = train_utils.Timer()
+        
+        print("******************************* This is where the magic happens *******************************")
         # Experience (replay) buffer.
         self.exp, self.exp_val = self._MakeExperienceBuffer()
         self._latest_replay_buffer_path = None
+        print("***********************************************************************")
+
+        exit(0)  #= 1
+
+        print("###################### Experience Buffers ######################")
+        print("Training Experience Buffer:")
+        print(self.exp)
+        print("\nValidation Experience Buffer:")
+        print(self.exp_val)
 
         # Cleanup handlers.  Ensures that the Ray cluster state remains healthy
         # even if this driver program is killed.
         signal.signal(signal.SIGTERM, self.Cleanup)
         signal.signal(signal.SIGINT, self.Cleanup)
+        
 
     def Cleanup(self, signum, frame):
         """Calls ray.shutdown() on cleanup."""
@@ -765,6 +832,27 @@ class BalsaAgent(object):
             signal.Signals(signum).name))
         ray.shutdown()
 
+    """
+    The _MakeWorkload() method creates and configures the query workload that
+    Balsa will use for training and evaluation. Here's what it does:
+
+    Purpose: Sets up the collection of SQL queries that the optimizer will learn
+    to optimize.
+
+    Two Loading Paths:
+
+    1. Load Pre-existing Experience (lines 782-787):
+        - If p.init_experience file exists, loads a pickled workload with expert
+    optimizer experience
+        - Filters queries based on current configuration (query_glob,
+    test_query_glob)
+        - This allows starting with previously collected optimization data
+    2. Create Fresh Workload (lines 789-795):
+        - Creates a new JoinOrderBenchmark workload from scratch
+        - Configures query directory (p.query_dir) and patterns (p.query_glob)
+        - Sets p.run_baseline = True to ensure baseline optimizer runs
+        - No test queries initially (wp.test_query_glob = None)
+    """
     def _MakeWorkload(self):
         p = self.params
         if os.path.isfile(p.init_experience):
@@ -778,7 +866,12 @@ class BalsaAgent(object):
             wp.query_dir = p.query_dir
             wp.query_glob = p.query_glob
             wp.test_query_glob = None
+            
+            # You initialize the workload from scratch, so you need to run
+            # *****************************
             workload = wp.cls(wp)
+            # *****************************
+
             # Requires baseline to run in this scenario.
             p.run_baseline = True
         return workload
@@ -803,14 +896,49 @@ class BalsaAgent(object):
         if not p.run_baseline:
             self.LogExpertExperience(self.train_nodes, self.test_nodes)
 
+    """
+    Experience Buffer Components:
+    - Training Data Storage: Stores query plans, their features, and optimization results
+    - Featurization: Configures how to convert plans and queries into neural network features:
+        - Plan featurizer: TreeNodeFeaturizer or PreOrderSequenceFeaturizer
+        - Query featurizer: Handles query-level features
+    - Workload Info: Contains metadata about the query workload
+
+    Key Configuration:
+    - Uses self.train_nodes as the base plan data
+    - Supports loading from previous experience (p.prev_replay_buffers_glob)
+    - Can create separate validation buffer (p.prev_replay_buffers_glob_val)
+
+    Purpose: In reinforcement learning for query optimization, the agent
+    needs to store:
+    - States: Query plans and features
+    - Actions: Optimization decisions (join orders)
+    - Rewards: Performance improvements
+    - Transitions: How actions change states
+
+    This is essentially the "memory" where Balsa stores all the optimization
+    experiences it learns from, allowing it to train the neural network on
+    accumulated data rather than just current episodes.
+    """
     def _MakeExperienceBuffer(self):
         p = self.params
+        # This gets triggered for Balsa_JOBRandSplit
         if not p.run_baseline and p.sim:
+            print('Using sim-trained workload info.')
             wi = self.GetOrTrainSim().training_workload_info
         else:
+            print('Using workload\'s workload info.')
             # E.g., if sim is disabled, we just use the overall workload info
             # (thus, this covers both train & test queries).
             wi = self.workload.workload_info
+        print(wi)
+        print("-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------")
+        print("-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------")
+        print("--------------------------------------------------------------------------------------------I AM HERE--------------------------------------------------------------------------------------------")
+        print("-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------")
+        print("-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------")
+        exit(0) #= 2
+
         if p.tree_conv:
             plan_feat_cls = plans_lib.TreeNodeFeaturizer
             if p.plan_physical:
@@ -818,16 +946,19 @@ class BalsaAgent(object):
                 plan_feat_cls = plans_lib.PhysicalTreeNodeFeaturizer
         else:
             plan_feat_cls = plans_lib.PreOrderSequenceFeaturizer
+        
         query_featurizer_cls = _GetQueryFeaturizerClass(p)
         if self.sim is not None:
             # Use the already instantiated query featurizer, which may contain
             # computed normalization stats.
             query_featurizer_cls = self.GetOrTrainSim().query_featurizer
+        
         exp = Experience(self.train_nodes,
                          p.tree_conv,
                          workload_info=wi,
                          query_featurizer_cls=query_featurizer_cls,
                          plan_featurizer_cls=plan_feat_cls)
+        
         if p.prev_replay_buffers_glob is not None:
             exp.Load(p.prev_replay_buffers_glob,
                      p.prev_replay_keep_last_fraction)
@@ -1156,6 +1287,7 @@ class BalsaAgent(object):
 
     def GetOrTrainSim(self):
         p = self.params
+        # This is set to None for 
         if self.sim is None:
             self.sim = TrainSim(p, self.loggers)
         return self.sim
@@ -2081,8 +2213,13 @@ class BalsaAgent(object):
     def Run(self):
         p = self.params
         if p.run_baseline:
+            print("Running baseline execution.")
             return self.RunBaseline()
         else:
+            # - curr_value_iter = 0: Current iteration counter
+            # - num_query_execs = 0: Total query executions
+            # - num_total_timeouts = 0: Timeout counter
+            # - overall_best_*_latency = np.inf: Best latency tracking for train/test sets
             self.curr_value_iter = 0
             self.num_query_execs = 0
             self.num_total_timeouts = 0
@@ -2137,7 +2274,7 @@ def Main(argv):
     name = FLAGS.run
     print('Looking up params by name:', name)
     p = balsa.params_registry.Get(name)
-
+    print('Params:\n{}'.format(p))
     p.use_local_execution = FLAGS.local
     # Override params here for quick debugging.
     # p.sim_checkpoint = None

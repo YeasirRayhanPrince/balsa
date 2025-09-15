@@ -30,7 +30,9 @@ def ParseSqlToNode(path):
     query_name = os.path.splitext(base)[0]
     with open(path, 'r') as f:
         sql_string = f.read()
+    # ****************************** This is where the magic happens ***********************
     node, json_dict = postgres.SqlToPlanNode(sql_string)
+    # ****************************** This is where the magic happens ***********************
     node.info['path'] = path
     node.info['sql_str'] = sql_string
     node.info['query_name'] = query_name
@@ -173,15 +175,40 @@ class JoinOrderBenchmark(Workload):
         self.workload_info.SetPhysicalOps(p.search_space_join_ops,
                                           p.search_space_scan_ops)
 
+
+    ###########################################################
+    ###########################################################
+    ################## ENTRY POINT: LOAD QUERIES ##############
+    ###########################################################
+    ###########################################################
     def _LoadQueries(self):
         """Loads all queries into balsa.Node objects."""
         p = self.params
         all_sql_set = self._get_sql_set(p.query_dir, p.query_glob)
         test_sql_set = self._get_sql_set(p.query_dir, p.test_query_glob)
         assert test_sql_set.issubset(all_sql_set)
+        
+        # ['queries/join-order-benchmark/10a.sql', 'queries/join-order-benchmark/10b.sql', ...
         # sorted by query id for easy debugging
         all_sql_list = sorted(all_sql_set)
-        all_nodes = [ParseSqlToNode(sqlfile) for sqlfile in all_sql_list]
+        
+        # ******************************* This is where the magic happens ***********************
+
+        
+        if os.getenv('BALSA_DEBUG_INTERACTIVE'):
+            all_nodes = []
+            for sqlfile in all_sql_list:
+                input(f"Processing {sqlfile}. Press Enter...")
+                node = ParseSqlToNode(sqlfile)
+                
+                print(f"\n=== Node for {sqlfile} ===")
+                print(node)  # Uses the __str__ method (calls to_str())
+                node.print_tree()
+                
+                all_nodes.append(node)
+        else:
+            all_nodes = [ParseSqlToNode(sqlfile) for sqlfile in all_sql_list]
+        # ******************************* This is where the magic happens ***********************
 
         train_nodes = [
             n for n in all_nodes

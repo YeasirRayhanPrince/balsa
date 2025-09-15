@@ -51,12 +51,15 @@ class Experience(object):
         query_featurizer_cls=plans_lib.QueryFeaturizer,
         workload_info=None,
     ):
+        # data = self.all_nodes from sim.py
         self.tree_conv = tree_conv
+        
         if keep_scans_joins_only:
             print('plans_lib.FilterScansOrJoins()')
             self.nodes = plans_lib.FilterScansOrJoins(data)
         else:
             self.nodes = data
+        
         self.initial_size = len(self.nodes)
 
         self.plan_featurizer_cls = plan_featurizer_cls
@@ -66,6 +69,7 @@ class Experience(object):
 
         #### Affects query featurization.
         print('plans_lib.GatherUnaryFiltersInfo()')
+        
         # Requires:
         #   leaf.info['filter'] for leaf under node.
         # Writes:
@@ -82,8 +86,10 @@ class Experience(object):
         #   plans_lib.QueryFeaturizer.
         #
         # TODO: check that first N nodes don't change.
-        postgres.EstimateFilterRows(self.nodes)
 
+        # You are using the cardinality estimates from Postgres to get the cost of all the filters
+        postgres.EstimateFilterRows(self.nodes)
+        
     def Save(self, path):
         """Saves all Nodes in the current replay buffer to a file."""
         if os.path.exists(path):
@@ -715,6 +721,32 @@ class SimpleReplayBuffer(Experience):
         return all_query_vecs, all_feat_vecs, all_pa_pos_vecs, all_costs
 
 
+#############################################################
+#############################################################
+######################## Simulation Data ####################
+#############################################################
+#############################################################
+"""
+simulation_data = [
+    # state, goal, reward
+    SubplanGoalCost(
+        subplan=node,      # A Node object (join operation)
+        goal=query_node,   # A Node object (full query goal)  
+        cost=cost,         # Float (cost of reaching the goal)
+        ),
+    SubplanGoalCost(...),
+    # ... more SubplanGoalCost objects
+  ]
+E.g., 
+[
+    SubplanGoalCost(subplan='/*+ Leading((cn (mc (t kt)))) */', goal='cn,kt,mc,mi,t', cost=17530220)
+    SubplanGoalCost(subplan='/*+ Leading((mc (kt (t (miidx it))))) */', goal='cn,ct,it,kt,mc,mi,miidx,t', cost=21501465)
+    SubplanGoalCost(subplan='/*+ Leading((k (mk (t (mi (mc cn)))))) */', goal='cn,it2,k,mc,mi,mi_idx,mk,t', cost=11228179)
+    SubplanGoalCost(subplan='/*+ Leading(((mi_idx t) (mc (ci (it1 (mi (k mk))))))) */', goal='ci,it1,k,mc,mi,mi_idx,mk,t', cost=13883733)
+    SubplanGoalCost(subplan='/*+ Leading(((mc (n (ci (it2 (mi_idx (mi it1)))))) mk)) */', goal='ci,it1,it2,mc,mi,mi_idx,mk,n', cost=14150021)
+    SubplanGoalCost(subplan='/*+ Leading((mi_idx (ci t))) */', goal='ci,cn,it1,k,mc,mi,mi_idx,mk,n,t', cost=20506686)
+]
+"""
 class SubplanGoalCost(
         collections.namedtuple(
             'SubplanGoalCost',

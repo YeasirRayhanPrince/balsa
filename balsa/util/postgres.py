@@ -55,7 +55,9 @@ def _SetGeneticOptimizer(flag, cursor):
 
 def DropBufferCache():
     # WARNING: no effect if PG is running on another machine
-    subprocess.check_output(['free', '&&', 'sync'])
+    # subprocess.check_output(['free', '&&', 'sync'])
+    subprocess.check_output(['free'])
+    subprocess.check_output(['sync'])
     subprocess.check_output(
         ['sudo', 'sh', '-c', 'echo 3 > /proc/sys/vm/drop_caches'])
     subprocess.check_output(['free'])
@@ -89,6 +91,10 @@ def ExplainAnalyzeSql(sql,
                         remote=remote)
 
 
+##############################################################################
+################# Query Plan Node Interface ##################################
+##############################################################################
+##############################################################################
 def SqlToPlanNode(sql,
                   comment=None,
                   verbose=False,
@@ -106,6 +112,7 @@ def SqlToPlanNode(sql,
                           verbose,
                           geqo_off=geqo_off,
                           cursor=cursor).result
+    
     json_dict = result[0][0][0]
     node = ParsePostgresPlanJson(json_dict)
     if not keep_scans_joins_only:
@@ -330,7 +337,17 @@ def EstimateFilterRows(nodes):
                     num_rows = json_dict['Plan']['Plan Rows']
                     cache[key] = num_rows
     print('{} unique filters'.format(len(cache)))
-    pprint.pprint(cache)
+    print("############################################################################")
+    print("############################################################################")
+    print("################################ PRINT CACHE ##############################")
+    print("############################################################################")
+    print("############################################################################")
+    # pprint.pprint(cache)
+    print("############################################################################")
+    print("Format: (table_id, predicate) -> estimated # rows")
+    print("############################################################################")
+    print("############################################################################")
+    
     for node in nodes:
         d = {}
         for table_id, pred in node.info['all_filters'].items():
