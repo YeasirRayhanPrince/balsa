@@ -16,6 +16,7 @@ import collections
 import copy
 import gc
 import glob
+import logging
 import os
 import pickle
 import pprint
@@ -691,6 +692,12 @@ class SimpleReplayBuffer(Experience):
                                 subplans,
                                 rewrite_generic=False,
                                 verbose=False):
+        logging.info('-------------(state, goal, reward) → (plan_features, query_features, cost)----------------')
+        logging.info('**********************************************************')
+        logging.info('**********************************************************')
+        logging.info('Featurizing {} subplans...'.format(len(subplans)))
+        logging.info('**********************************************************')
+        logging.info('**********************************************************')
         t1 = time.time()
         assert len(subplans) == len(self.nodes), (len(subplans),
                                                   len(self.nodes))
@@ -711,12 +718,44 @@ class SimpleReplayBuffer(Experience):
             for i, node in enumerate(self.nodes):
                 all_feat_vecs[i] = self.featurizer(subplans[i])
 
+        # Configure NumPy to print full arrays (no truncation)
+        np.set_printoptions(threshold=np.inf, linewidth=300, precision=6, suppress=True)
+        
         # Debug print: check if query vectors are different/same.
-        for i in range(min(len(self.nodes), 10)):
-            print('query={} plan={} cost={}'.format(
-                (all_query_vecs[i] *
-                 np.arange(1, 1 + len(all_query_vecs[i]))).sum(),
-                all_feat_vecs[i], all_costs[i]))
+        logging.info("--------------------------------------------------------------------------")
+        logging.info(f"Query vector shape: {all_query_vecs[0].shape}, (#relation_ids, )")
+        logging.info(f"Plan vector shape: {np.array(all_feat_vecs[0]).shape}, (#max nodes in the tree, #features of each node)")
+        logging.info("--------------------------------------------------------------------------")
+        
+        # for i in range(len(self.nodes)):
+        #     print(f'\n{"="*100}')
+        #     print(f'=== Item {i+1}/{len(self.nodes)} ===')
+        #     print(f'{"="*100}')
+            
+        #     query_vec = np.array(all_query_vecs[i])
+        #     feat_vec = np.array(all_feat_vecs[i])
+            
+        #     print(f'all_query_vecs[{i}] (shape: {query_vec.shape}, dtype: {query_vec.dtype}):')
+        #     print(f'{query_vec}')
+            
+        #     print(f'\nall_feat_vecs[{i}] (shape: {feat_vec.shape}, dtype: {feat_vec.dtype}):')  
+        #     print(f'{feat_vec}')
+            
+        #     print(f'\nall_costs[{i}]: {all_costs[i]} (type: {type(all_costs[i])})')
+            
+        #     print(f'\nSummary:')
+        #     print(f'  - Query vector sum: {query_vec.sum():.6f}')
+        #     print(f'  - Plan vector sum: {feat_vec.sum():.6f}') 
+        #     print(f'  - Cost: {all_costs[i]}')
+        #     print(f'  - Non-zero query elements: {np.count_nonzero(query_vec)}')
+        #     print(f'  - Non-zero plan elements: {np.count_nonzero(feat_vec)}')
+            
+        #     print(f'{"="*100}')
+        #     input("Press Enter to continue to next item...")
+            
+        # # Reset NumPy print options to default when done
+        # np.set_printoptions()
+            
 
         return all_query_vecs, all_feat_vecs, all_pa_pos_vecs, all_costs
 

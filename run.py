@@ -402,11 +402,12 @@ def TrainSim(p, loggers=None):
     print("-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------")
     sim.Train(load_from_checkpoint=p.sim_checkpoint, loggers=loggers)
     
-    exit(0) #= 3
 
     sim.model.freeze()
     sim.EvaluateCost()
     sim.FreeData()
+    
+    # exit(0) #= 3
     return sim
 
 ####################################################################################################################################
@@ -716,6 +717,7 @@ class BalsaAgent(object):
             relax_timeout_factor=p.relax_timeout_factor,
             relax_timeout_on_n_timeout_iters=p.relax_timeout_on_n_timeout_iters,
             initial_timeout_ms=p.initial_timeout_ms)
+        
         # Query Caches
         self.query_execution_cache = execution.QueryExecutionCache() # Stores executed queries and results
         self.best_plans = execution.QueryExecutionCache()  # Stores the best plan found so far for each query

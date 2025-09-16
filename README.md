@@ -107,21 +107,22 @@ the agent neural network and query execution.
     cd ~/
     mkdir -p datasets/job && pushd datasets/job
     wget -c http://homepages.cwi.nl/~boncz/job/imdb.tgz && tar -xvzf imdb.tgz && popd
+    http://event.cwi.nl/da/job/imdb.tgz
     # Prepend headers to CSV files
-    python3 ~/balsa/scripts/prepend_imdb_headers.py
+    python3 balsa/scripts/prepend_imdb_headers.py
 
     # Create and start the DB
-    pg_ctl -D ~/imdb initdb
+    pg_ctl -D ./imdb initdb
 
     # Copy custom PostgreSQL configuration.
-    cp ~/balsa/conf/balsa-postgresql.conf ~/imdb/postgresql.conf
+    cp balsa/conf/balsa-postgresql.conf ./imdb/postgresql.conf
 
     # Start the server
-    pg_ctl -D ~/imdb start -l logfile
+    pg_ctl -D ./imdb start -l logfile
 
     # Load data + run analyze (can take several minutes)
-    cd ~/balsa
-    bash load-postgres/load_job_postgres.sh ~/datasets/job
+    cd ./balsa
+    bash load-postgres/load_job_postgres.sh /ssd_root/yrayhan/datasets/job
     ```
 
     Perform basic checks:

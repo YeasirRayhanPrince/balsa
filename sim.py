@@ -920,12 +920,26 @@ class Sim(object):
         logging.info("----------------------------------------------------------------------")
 
         
-        exit(0) #= 5
         logging.info("----------------------------------------------------------------------")
         logging.info('featurize_with_subplans()')
+        
+        """
+        An example subplan:
+            Hash Join cost=6164525
+            Index Scan [title AS t] cost=43898.72
+            Index Scan [movie_companies AS mc] cost=27206.55
+        
+            Hash Join cost=6164525
+            Index Scan [title AS t] cost=43898.72
+            Index Scan [movie_companies AS mc] cost=27206.55
+        
+            6164525
+        """
+        
         data = exp.featurize_with_subplans(
             subplans=[p.subplan for p in self.simulation_data],
             rewrite_generic=not p.plan_physical)
+        
         logging.info("----------------------------------------------------------------------")
         
         if try_load:
@@ -1018,40 +1032,45 @@ class Sim(object):
             print("*************************** This is where the featurization happens ***************************")
             print("No training data provided, featurizing training data")
             data = self._FeaturizeTrainingData()
-            print("*************************** This is where the featurization happens ***************************")
+            print("***********************************************************************************************")
 
-        exit(0) #= 4
-
+        
         # Make the DataLoader.
         logging.info('_MakeDatasetAndLoader()')
         self.train_dataset, self.train_loader, _, self.val_loader = \
             self._MakeDatasetAndLoader(data)
         batch = next(iter(self.train_loader))
-        logging.info(
-            'Example batch (query,plan,indexes,cost):\n{}'.format(batch))
-
+        logging.info('Example batch (query,plan,indexes,cost):')
+        # logging.info('Example batch (query,plan,indexes,cost):\n{}'.format(tuple(item[0:1] if hasattr(item, '__getitem__') and len(item) > 0 else item for item in batch)))
+        
+        
         # Initialize model.
         _, query_feat_dims = batch[0].shape
         if issubclass(p.plan_featurizer_cls, plans_lib.TreeNodeFeaturizer):
             # make_and_featurize_trees() tranposes the latter 2 dims.
             unused_bs, plan_feat_dims, unused_max_tree_nodes = batch[1].shape
+            # (bs=1024, #max nodes in plan=123,each node has features=22)
             logging.info(
                 'unused_bs, plan_feat_dims, unused_max_tree_nodes {}'.format(
-                    (unused_bs, plan_feat_dims, unused_max_tree_nodes)))
+                    (unused_bs, plan_feat_dims, unused_max_tree_nodes))
+                    )
         else:
             unused_bs, plan_feat_dims = batch[1].shape
+        
         self.model = self._MakeModel(query_feat_dims=query_feat_dims,
                                      plan_feat_dims=plan_feat_dims)
         balsa.models.ReportModel(self.model)
 
         # Train or load.
         self.trainer = self._MakeTrainer(loggers=loggers)
+        
         if load_from_checkpoint:
             self.model = SimModel.load_from_checkpoint(load_from_checkpoint)
             logging.info(
                 'Loaded pretrained checkpoint: {}'.format(load_from_checkpoint))
         else:
             self.trainer.fit(self.model, self.train_loader, self.val_loader)
+        
         return data
 
     def FreeData(self):
