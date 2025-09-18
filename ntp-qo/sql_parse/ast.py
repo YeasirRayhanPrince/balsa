@@ -320,7 +320,7 @@ class Node(object):
         query_hint = '\n '.join(atoms)
         return '/*+ ' + query_hint + ' */'
 
-    def print_tree(self, prefix="", is_last=True):
+    def print_tree(self, prefix="", is_last=True, true_card=None, estimated_card=None, actual_time_ms=None):
         """Print node in a tree-like format with detailed information."""
         connector = "└── " if is_last else "├── "
         
@@ -337,8 +337,15 @@ class Node(object):
         # Add cost information
         node_info += f" cost={self.cost}"
         
+        # Add cardinality information if available
+        if estimated_card is not None and self.info.get('estimated_rows') is not None:
+            node_info += f" est_rows={self.info['estimated_rows']}"
+        
+        if true_card is not None and self.info.get('actual_rows') is not None:
+            node_info += f" actual_rows={self.info['actual_rows']}"
+        
         # Add actual execution time if available
-        if self.actual_time_ms is not None:
+        if actual_time_ms is not None and self.actual_time_ms is not None:
             node_info += f" actual_time={self.actual_time_ms}ms"
         
         print(f"{prefix}{connector}{node_info}")

@@ -1,41 +1,20 @@
-# Copyright 2022 The Balsa Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 """MySQL connector: issues commands and parses results."""
 import json
 import logging
 import os
-import re
-import subprocess
-import tempfile
-from typing import Optional, Dict, Any
-
 import pandas as pd
-import mysql.connector
-
+import mysql.connector # pyright: ignore[reportMissingImports]
 from sql_parse import ast as plans_lib
 
 # MySQL Configuration
 MYSQL_HOST = os.getenv('MYSQL_HOST', 'localhost')
-MYSQL_PORT = int(os.getenv('MYSQL_PORT', '3306'))
+MYSQL_PORT = int(os.getenv('MYSQL_PORT', '3307'))
 MYSQL_DATABASE = os.getenv('MYSQL_DATABASE', 'imdbload')
 MYSQL_USER = os.getenv('MYSQL_USER', 'root')
-MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD', '')
+MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD', None)
 
 
 def GetServerVersion():
-    """Get MySQL version."""
     conn = _get_or_create_connection()
     try:
         cursor = conn.cursor()
@@ -70,59 +49,52 @@ def SqlToPlanNode(sql,
                   comment=None,
                   verbose=False,
                   keep_scans_joins_only=False,
-                  connection=None):
-    """Issues EXPLAIN on a SQL string; parse into our AST node."""
+                  connection=None,
+                  true_card=None):
+    """Issues EXPLAIN(format json) on a SQL string; parse into our AST node."""
     
     # Setup database and connection
     conn = _get_or_create_connection(connection)
     should_close = connection is None
     
     try:
-        # Note: IMDB tables should already be loaded via load_job_mysql.sh
-        
-        # Transform SQL for MySQL compatibility
         transformed_sql = _transform_sql_for_mysql(sql)
         
-        # MySQL EXPLAIN syntax - use JSON format
-        explain_sql = f"EXPLAIN FORMAT=JSON {transformed_sql}"
+        # MySQL EXPLAIN ANALYZE syntax - returns text format
+        if true_card is not None:
+            explain_sql = f"EXPLAIN ANALYZE {transformed_sql}"
+        else:
+            explain_sql = f"EXPLAIN (FORMAT TREE) {transformed_sql}"
         if verbose:
             logging.info(f"Executing: {explain_sql}")
-        
+
         try:
             cursor = conn.cursor()
             cursor.execute(explain_sql)
             result = cursor.fetchall()
             
-            # MySQL EXPLAIN FORMAT=JSON returns JSON in the first column
-            if result and result[0]:
-                json_text = result[0][0]
-                json_dict = json.loads(json_text)
+            # MySQL EXPLAIN ANALYZE returns text rows
+            if result:
+                # Combine all rows and split on newlines to get individual plan lines
+                raw_text = '\n'.join([row[0] for row in result if row and row[0]])
+                text_lines = raw_text.split('\n')
             else:
-                # Fallback if format is unexpected
-                json_dict = {"query_block": {"message": "No plan available"}}
+                text_lines = ["No plan available"]
             
             if verbose:
-                logging.info(f"MySQL JSON plan structure: {json.dumps(json_dict, indent=2)}")
+                logging.info(f"MySQL EXPLAIN ANALYZE output:\n" + "\n".join(text_lines))
                 
         except Exception as e:
-            logging.error(f"EXPLAIN failed: {e}, {sql}")
-            # Create minimal fallback structure
-            json_dict = {
-                "query_block": {
-                    "message": "Error",
-                    "cost_info": {"query_cost": "0.0"},
-                    "error": str(e)
-                }
-            }
+            logging.error(f"EXPLAIN ANALYZE failed: {e}, {sql}")
+            # Create minimal fallback
+            text_lines = [f"Error: {str(e)}"]
         
-        # Parse into our Node structure - handle MySQL JSON format
-        if 'query_block' in json_dict:
-            # MySQL JSON format: has query_block structure
-            node = _parse_mysql_json_plan(json_dict['query_block'])
-        else:
-            # Fallback format
-            node = _create_fallback_node(json_dict)
-        
+        # Parse the text-based tree format
+        print(text_lines)
+        node = _parse_mysql_text_plan(text_lines)
+        json_dict = {"mysql_text_plan": text_lines}
+        print(node.print_tree())
+        print(json_dict)
         if not keep_scans_joins_only:
             return node, json_dict
         return plans_lib.FilterScansOrJoins(node), json_dict
@@ -139,13 +111,16 @@ def _get_or_create_connection(connection=None):
     
     # Create MySQL connection
     try:
-        conn = mysql.connector.connect(
-            host=MYSQL_HOST,
-            port=MYSQL_PORT,
-            database=MYSQL_DATABASE,
-            user=MYSQL_USER,
-            password=MYSQL_PASSWORD
-        )
+        connection_params = {
+            'host': MYSQL_HOST,
+            'port': MYSQL_PORT,
+            'database': MYSQL_DATABASE,
+            'user': MYSQL_USER
+        }
+        if MYSQL_PASSWORD:
+            connection_params['password'] = MYSQL_PASSWORD
+        
+        conn = mysql.connector.connect(**connection_params)
         
         # Quick validation that IMDB tables exist
         cursor = conn.cursor()
@@ -167,7 +142,7 @@ def _transform_sql_for_mysql(sql):
     
     # Fix reserved keyword issues: quote problematic aliases
     # Common reserved words in MySQL that are used as aliases in JOB queries
-    reserved_aliases = ['at', 'to', 'as', 'or', 'and', 'not', 'in', 'on', 'order', 'group']
+    reserved_aliases = ['at', 'to', 'as', 'or', 'and', 'not', 'in', 'on', 'order', 'group', 'character']
     
     transformed = sql
     
@@ -188,57 +163,157 @@ def _transform_sql_for_mysql(sql):
     return transformed
 
 
-def _parse_mysql_json_plan(query_block):
-    """Parse MySQL JSON plan node into our AST Node structure."""
+def _parse_mysql_text_plan(text_lines):
+    """Parse MySQL EXPLAIN ANALYZE text format into our AST Node structure."""
+    import re
     
-    print(query_block)
+    if not text_lines:
+        return _create_fallback_node({})
+    
+    # Debug: print lines to understand format
+    print("=== PARSING MYSQL LINES ===")
+    for i, line in enumerate(text_lines):
+        print(f"Line {i}: '{line}'")
+    print("=== END LINES ===")
+    
+    # Build tree structure from indented text
+    nodes_stack = []
+    root_node = None
+    
+    for line_num, line in enumerate(text_lines):
+        if not line or not line.strip():
+            continue
+            
+        # Skip lines that don't start with -> (table borders, etc.)
+        if '->' not in line:
+            continue
+            
+        # Calculate indentation level by counting spaces before ->
+        arrow_pos = line.find('->')
+        if arrow_pos == -1:
+            continue
+            
+        indent_level = arrow_pos // 4  # Assuming 4-space indents
+        
+        print(f"Line {line_num}: indent_level={indent_level}, line='{line.strip()}'")
+        
+        # Parse the operation line
+        node = _parse_mysql_operation_line(line)
+        print(f"  -> Created node: {node.node_type}, cost={node.cost}")
+        
+        # Handle tree structure
+        if root_node is None:
+            # First node becomes root
+            root_node = node
+            nodes_stack = [node]
+        else:
+            # Adjust stack to current indentation level
+            # Pop nodes until stack matches current depth
+            while len(nodes_stack) > indent_level + 1:
+                nodes_stack.pop()
+            
+            # Add as child of current parent
+            if nodes_stack:
+                parent = nodes_stack[-1]
+                parent.children.append(node)
+                print(f"  -> Added as child of: {parent.node_type}")
+            
+            # Push current node to stack for potential children
+            nodes_stack.append(node)
+    
+    print(f"=== FINAL ROOT: {root_node.node_type if root_node else 'None'} ===")
+    return root_node if root_node else _create_fallback_node({})
 
-    # Extract operation type
-    node_type = "MySQL Plan"
-    if 'table' in query_block:
-        node_type = "Table Scan"
-    elif 'nested_loop' in query_block:
-        node_type = "Nested Loop"
-    elif 'grouping_operation' in query_block:
-        node_type = "Aggregate"
-    elif 'ordering_operation' in query_block:
-        node_type = "Sort"
+
+def _parse_mysql_operation_line(line):
+    """Parse a single MySQL operation line into a Node."""
+    import re
     
-    # Create our Node
+    # Extract operation name and parameters
+    # Pattern: -> Operation_Name (cost=X rows=Y) [optional actual stats]
+    operation_match = re.match(r'\s*->\s*([^(]+)', line)
+    operation_name = operation_match.group(1).strip() if operation_match else "Unknown"
+    
+    # Extract cost and rows estimates
+    cost_match = re.search(r'cost=([0-9.e+\-]+)', line)
+    rows_match = re.search(r'rows=([0-9.e+\-]+)', line)
+    
+    # Extract actual statistics if present
+    actual_time_match = re.search(r'actual time=([0-9.]+)\.\.([0-9.]+)', line)
+    actual_rows_match = re.search(r'actual.*rows=([0-9]+)', line)
+    
+    # Map MySQL operation names to our standard names
+    node_type = _map_mysql_operation_to_standard(operation_name)
+    
+    # Create node
     node = plans_lib.Node(node_type)
     
-    # Extract cost information
-    cost_info = query_block.get('cost_info', {})
-    query_cost = cost_info.get('query_cost', '1000.0')
-    try:
-        node.cost = float(query_cost)
-    except (ValueError, TypeError):
+    # Set cost
+    if cost_match:
+        try:
+            node.cost = float(cost_match.group(1))
+        except ValueError:
+            node.cost = 1000.0
+    else:
         node.cost = 1000.0
     
-    # Extract table information for scan nodes
-    table_info = query_block.get('table', {})
-    if table_info:
-        node.table_name = table_info.get('table_name', 'unknown')
-        # MySQL doesn't preserve aliases the same way, use table name
-        node.table_alias = table_info.get('table_name', 'unknown')
+    # Set actual time if available
+    if actual_time_match:
+        try:
+            actual_time = float(actual_time_match.group(2))  # End time
+            node.actual_time_ms = actual_time
+        except ValueError:
+            pass
     
-    # Store additional information
-    node.info['mysql_extra'] = query_block
+    # Extract table name for scan operations
+    table_match = re.search(r'Table scan on (\w+)', operation_name)
+    if table_match:
+        node.table_name = table_match.group(1)
+        node.table_alias = table_match.group(1)
+    
+    # Extract index information
+    index_match = re.search(r'Index lookup on (\w+) using (\w+)', operation_name)
+    if index_match:
+        node.table_name = index_match.group(1)
+        node.table_alias = index_match.group(1)
+    
+    # Store MySQL-specific info
     node.info['database_system'] = 'mysql'
+    node.info['mysql_operation'] = operation_name
+    node.info['mysql_line'] = line.strip()
     
-    # Add filters if present - ensure it's a string
-    if 'attached_condition' in query_block:
-        filter_value = query_block['attached_condition']
-        node.info['filter'] = str(filter_value) if filter_value is not None else None
-    
-    # Handle nested operations (joins, subqueries)
-    if 'nested_loop' in query_block:
-        nested_loop = query_block['nested_loop']
-        for child_block in nested_loop:
-            child_node = _parse_mysql_json_plan(child_block)
-            node.children.append(child_node)
+    # Extract filter conditions
+    filter_match = re.search(r'Filter: (.+?)(?:\s+\(cost=|$)', line)
+    if filter_match:
+        node.info['filter'] = filter_match.group(1)
     
     return node
+
+
+def _map_mysql_operation_to_standard(operation_name):
+    """Map MySQL operation names to standard plan node types."""
+    operation_lower = operation_name.lower()
+    
+    if 'table scan' in operation_lower:
+        return 'Seq Scan'
+    elif 'index lookup' in operation_lower or 'index scan' in operation_lower:
+        return 'Index Scan'
+    elif 'nested loop' in operation_lower:
+        return 'Nested Loop'
+    elif 'hash join' in operation_lower:
+        return 'Hash Join'
+    elif 'inner hash join' in operation_lower:
+        return 'Hash Join'
+    elif 'aggregate' in operation_lower:
+        return 'Aggregate'
+    elif 'sort' in operation_lower or 'ordering' in operation_lower:
+        return 'Sort'
+    elif 'filter' in operation_lower:
+        return 'Filter'
+    elif 'hash' in operation_lower and 'join' not in operation_lower:
+        return 'Hash'
+    else:
+        return operation_name.strip()
 
 
 def _create_fallback_node(json_dict):
@@ -262,8 +337,7 @@ def ExecuteSql(sql, hint=None, verbose=False):
         
         cursor = conn.cursor()
         cursor.execute(sql)
-        result = cursor.fetchall()
-        return result
+        return cursor.fetchall()
         
     finally:
         conn.close()
@@ -291,7 +365,7 @@ def GetLatencyFromMySQL(sql, verbose=False):
         cursor = conn.cursor()
         start_time = time.time()
         cursor.execute(sql)
-        result = cursor.fetchall()
+        cursor.fetchall()  # Execute the query
         end_time = time.time()
         
         latency_ms = (end_time - start_time) * 1000

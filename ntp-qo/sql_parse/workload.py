@@ -7,20 +7,22 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 import numpy as np
-from dbs import postgres, duckdb
+from dbs import postgres, duckdb, mysql
 
-def ParseSqlToNode(path, engine):
+def ParseSqlToNode(path, engine, true_card=None):
     base = os.path.basename(path)
     query_name = os.path.splitext(base)[0]
     with open(path, 'r') as f:
         sql_string = f.read()
     # ****************************** This is where the magic happens ***********************
     if engine == 'postgres':
-      node, json_dict = postgres.SqlToPlanNode(sql_string)
+      node, json_dict = postgres.SqlToPlanNode(sql_string, true_card=true_card)
     elif engine == 'duckdb':
       node, json_dict = duckdb.SqlToPlanNode(sql_string)
+    elif engine == 'mysql':
+      node, json_dict = mysql.SqlToPlanNode(sql_string, true_card=true_card)
     else:
-      raise ValueError(f"Unsupported engine: {engine}. Supported engines: postgres, duckdb")
+      raise ValueError(f"Unsupported engine: {engine}. Supported engines: postgres, duckdb, mysql")
     # ****************************** This is where the magic happens ***********************
     node.info['path'] = path
     node.info['sql_str'] = sql_string
@@ -38,6 +40,7 @@ class WorkloadParams:
   search_space_join_ops: List[str] = None
   search_space_scan_ops: List[str] = None
   engine: str = 'postgres'
+  true_card: Optional[bool] = None
   
   # def __post_init__(self):
   #   if self.search_space_join_ops is None:
@@ -166,7 +169,7 @@ class JoinOrderBenchmark(Workload):
       all_nodes = []
       for sqlfile in all_sql_list:
         input(f"Processing {sqlfile}. Press Enter...")
-        node = ParseSqlToNode(sqlfile, p.engine)
+        node = ParseSqlToNode(sqlfile, p.engine, p.true_card)
         
         print(f"\n=== Node for {sqlfile} ===")
         print(node)  # Uses the __str__ method (calls to_str())
@@ -174,7 +177,7 @@ class JoinOrderBenchmark(Workload):
         
         all_nodes.append(node)
     else:
-      all_nodes = [ParseSqlToNode(sqlfile, p.engine) for sqlfile in all_sql_list]
+      all_nodes = [ParseSqlToNode(sqlfile, p.engine, p.true_card) for sqlfile in all_sql_list]
     # ******************************* This is where the magic happens ***********************
 
     train_nodes = [

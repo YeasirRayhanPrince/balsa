@@ -21,6 +21,7 @@ import pandas as pd
 
 from sql_parse import ast as plans_lib
 import pg_executor
+import json
 
 
 def GetServerVersion():
@@ -99,24 +100,39 @@ def SqlToPlanNode(sql,
                   comment=None,
                   verbose=False,
                   keep_scans_joins_only=False,
-                  cursor=None):
+                  cursor=None,
+                  true_card=None):
     """Issues EXPLAIN(format json) on a SQL string; parse into our AST node."""
     # Use of 'verbose' would alias-qualify all column names in pushed-down
     # filters, which are beneficial for us (e.g., this ensures that
     # Node.to_sql() returns a non-ambiguous SQL string).
     # Ref: https://www.postgresql.org/docs/11/sql-explain.html
     geqo_off = comment is not None and len(comment) > 0
-    result = _run_explain('explain(verbose, format json)',
+    if true_card is not None:
+        result = _run_explain('explain (verbose, analyze, format json)',
                           sql,
                           comment,
                           verbose,
-                          geqo_off=geqo_off,
-                          cursor=cursor).result
+                          geqo_off=geqo_off).result
+    else:
+        result = _run_explain('explain(verbose, format json)',
+                            sql,
+                            comment,
+                            verbose,
+                            geqo_off=geqo_off,
+                            cursor=cursor).result
     
     json_dict = result[0][0][0]
+    
+    # # Save the JSON dictionary to a file
+    # with open('plan.json', 'w') as f:
+    #     json.dump(json_dict, f, indent=4)
+    # input("Wrote plan.json. Press Enter to continue...")
+    
     node = ParsePostgresPlanJson(json_dict)
     if not keep_scans_joins_only:
         return node, json_dict
+    
     return plans_lib.FilterScansOrJoins(node), json_dict
 
 
@@ -264,7 +280,7 @@ def _FilterExprsByAlias(exprs, table_alias):
 def ParsePostgresPlanJson(json_dict):
     """Takes JSON dict, parses into a Node."""
     curr = json_dict['Plan']
-    print(json_dict)
+    
     def _parse_pg(json_dict, select_exprs=None, indent=0):
         op = json_dict['Node Type']
         cost = json_dict['Total Cost']
@@ -280,6 +296,12 @@ def ParsePostgresPlanJson(json_dict):
         curr_node.cost = cost
         # Only available if 'analyze' is set (actual execution).
         curr_node.actual_time_ms = json_dict.get('Actual Total Time')
+        
+        # Store cardinality information
+        curr_node.info['estimated_rows'] = json_dict.get('Plan Rows')
+        # Only available if 'analyze' is set (actual execution).
+        curr_node.info['actual_rows'] = json_dict.get('Actual Rows')
+        
         if 'Relation Name' in json_dict:
             curr_node.table_name = json_dict['Relation Name']
             curr_node.table_alias = json_dict['Alias']

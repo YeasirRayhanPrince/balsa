@@ -97,7 +97,7 @@ def SqlToPlanNode(sql,
         # Parse into our Node structure - handle both JSON and fallback formats
         if isinstance(json_dict, list) and len(json_dict) > 0:
             # DuckDB JSON format: array of plan nodes
-            node = _parse_duckdb_json_plan(json_dict[0])  # Start with root node
+            node = ParseDuckdbPlanJson(json_dict[0])  # Start with root node
         else:
             # Fallback text format
             node = ParseDuckDBPlanJson(json_dict)
@@ -168,7 +168,7 @@ def _transform_sql_for_duckdb(sql):
     return transformed
 
 
-def _parse_duckdb_json_plan(json_node):
+def ParseDuckdbPlanJson(json_node):
     """Parse DuckDB JSON plan node into our AST Node structure."""
     
     print(json_node)
@@ -217,7 +217,7 @@ def _parse_duckdb_json_plan(json_node):
     # Recursively parse children
     children = json_node.get('children', [])
     for child_json in children:
-        child_node = _parse_duckdb_json_plan(child_json)
+        child_node = ParseDuckdbPlanJson(child_json)
         node.children.append(child_node)
     
     return node
@@ -378,13 +378,45 @@ def GetLatencyFromDuckDB(sql, verbose=False):
 
 def GetAllTableNumRows(rel_names):
     """Get row counts for all specified tables."""
+    
+    # Use the same cache as PostgreSQL for consistency
+    CACHE = {
+        'aka_name': 901343,
+        'aka_title': 361472,
+        'cast_info': 36244344,
+        'char_name': 3140339,
+        'comp_cast_type': 4,
+        'company_name': 234997,
+        'company_type': 4,
+        'complete_cast': 135086,
+        'info_type': 113,
+        'keyword': 134170,
+        'kind_type': 7,
+        'link_type': 18,
+        'movie_companies': 2609129,
+        'movie_info': 14835720,
+        'movie_info_idx': 1380035,
+        'movie_keyword': 4523930,
+        'movie_link': 29997,
+        'name': 4167491,
+        'person_info': 2963664,
+        'role_type': 12,
+        'title': 2528312,
+    }
+    
     conn = _get_or_create_connection()
     try:
         table_rows = {}
         for table_name in rel_names:
+            if table_name in CACHE:
+                # Use cached value for consistency with PostgreSQL
+                table_rows[table_name] = CACHE[table_name]
+                continue
+                
             try:
                 result = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
                 table_rows[table_name] = result[0] if result else 0
+                print(f'DuckDB table {table_name}: {table_rows[table_name]} rows')
             except Exception as e:
                 logging.warning(f"Could not get row count for table {table_name}: {e}")
                 table_rows[table_name] = 0

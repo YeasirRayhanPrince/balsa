@@ -1,0 +1,37 @@
+# PostgreSQL configuration for local testing
+# Similar to Balsa's baseline configuration
+
+database:
+  host: "localhost"
+  port: 5432
+  username: "postgres"
+  password: ""  # Add your password here
+  database: "imdb"  # JOB benchmark uses IMDB dataset
+  
+  # Extra PostgreSQL parameters
+  extra_params:
+    application_name: "ntp-qo-collector"
+    connect_timeout: 30
+
+# Query collection settings
+collection:
+  # Directory containing JOB queries
+  query_dir: "../queries/join-order-benchmark"
+  
+  # Limit number of queries for testing (null = all)
+  query_limit: null
+  
+  # Output settings
+  output_file: "data/job_plans.json"
+  save_individual_plans: false
+  
+  # Plan collection options
+  include_costs: true
+  include_timing: false  # Set to true for EXPLAIN ANALYZE
+  timeout_seconds: 60
+
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  format: "%(asctime)s - %(levelname)s - %(message)s"
+  file: null  # Set to filename to log to file

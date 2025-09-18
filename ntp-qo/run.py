@@ -129,7 +129,7 @@ def test_join_order_benchmark():
         print(f"\nJoinOrderBenchmark test failed: {e}")
         return False
 
-def test_join_order_benchmark_w_diff_engine(engine='duckdb'):
+def test_join_order_benchmark_w_diff_engine(engine='postgres', true_card=None):
     """Test a different engine for JoinOrderBenchmark initialization."""
     print("\n" + "="*60)
     print("Testing Different Engine: JoinOrderBenchmark")
@@ -147,19 +147,24 @@ def test_join_order_benchmark_w_diff_engine(engine='duckdb'):
             print(f"\n   Creating WorkloadParams with {engine} engine...")
             params = WorkloadParams(
                 query_dir="/ssd_root/yrayhan/balsa/queries/join-order-benchmark",
-                engine=engine
+                engine=engine,
+                true_card=true_card
             )
             print(f"   WorkloadParams created:")
             print(f"     engine: {params.engine}")
             print(f"     query_dir: {params.query_dir}")
             
             print(f"\n   Initializing JoinOrderBenchmark with {engine} engine...")
+            
             job = JoinOrderBenchmark(params)
+            
             print(f"✅ JOB created successfully with {engine} engine!")
             print(f"\nWorkload info:")
             print(job.workload_info)
             print(f"\nFirst 2 query nodes:")
-            print(job.query_nodes[:2])
+            for _ in job.query_nodes[:2]:
+                # print(_)
+                print(_.print_tree(true_card=True))
         except Exception as e:
             import traceback
             print(f"\n❌ Detailed error in JOB initialization:")
@@ -185,13 +190,16 @@ def main():
                        choices=SUPPORTED_ENGINES, 
                        default='duckdb',
                        help=f'Database engine to use (choices: {", ".join(SUPPORTED_ENGINES)}, default: duckdb)')
+    parser.add_argument('--true_card', 
+                       action='store_true',
+                       help='Enable true cardinality (default: False)')
     
     args = parser.parse_args()
     
     # Configure logging to show INFO level messages
     logging.basicConfig(level=logging.INFO, format='%(filename)s:%(lineno)d: %(levelname)s: %(message)s')
     
-    print(f"Running tests with engine: {args.engine}")
+    print(f"Running tests with engine: {args.engine}, {'true_card' if args.true_card else 'no true_card'}")
     
     success = True
     
@@ -206,7 +214,10 @@ def main():
     # success &= test_join_order_benchmark()
 
     # Test 4: JoinOrderBenchmark with different engine
-    success &= test_join_order_benchmark_w_diff_engine(engine=args.engine)
+    success &= test_join_order_benchmark_w_diff_engine(
+        engine=args.engine, 
+        true_card=args.true_card
+        )
     
     # Summary
     print("\n" + "="*80)
