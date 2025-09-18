@@ -1,0 +1,412 @@
+{
+    "total_bytes_written": 0,
+    "total_bytes_read": 0,
+    "rows_returned": 0,
+    "latency": 0.0,
+    "result_set_size": 0,
+    "query_name": "",
+    "blocked_thread_time": 0.0,
+    "system_peak_buffer_memory": 0,
+    "system_peak_temp_dir_size": 0,
+    "cpu_time": 0.0,
+    "extra_info": {},
+    "cumulative_cardinality": 0,
+    "cumulative_rows_scanned": 0,
+    "children": [
+        {
+            "total_bytes_written": 0,
+            "total_bytes_read": 0,
+            "result_set_size": 0,
+            "operator_name": "EXPLAIN_ANALYZE",
+            "cpu_time": 0.0,
+            "extra_info": {},
+            "cumulative_cardinality": 0,
+            "operator_type": "EXPLAIN_ANALYZE",
+            "operator_cardinality": 0,
+            "cumulative_rows_scanned": 0,
+            "operator_rows_scanned": 0,
+            "operator_timing": 0.000002145,
+            "children": [
+                {
+                    "total_bytes_written": 0,
+                    "total_bytes_read": 0,
+                    "result_set_size": 32,
+                    "operator_name": "UNGROUPED_AGGREGATE",
+                    "cpu_time": 0.0,
+                    "extra_info": {
+                        "Aggregates": [
+                            "min(#0)",
+                            "min(#1)"
+                        ]
+                    },
+                    "cumulative_cardinality": 0,
+                    "operator_type": "UNGROUPED_AGGREGATE",
+                    "operator_cardinality": 1,
+                    "cumulative_rows_scanned": 0,
+                    "operator_rows_scanned": 0,
+                    "operator_timing": 0.000517868,
+                    "children": [
+                        {
+                            "total_bytes_written": 0,
+                            "total_bytes_read": 0,
+                            "result_set_size": 3328,
+                            "operator_name": "PROJECTION",
+                            "cpu_time": 0.0,
+                            "extra_info": {
+                                "Projections": [
+                                    "name",
+                                    "title"
+                                ],
+                                "Estimated Cardinality": "1123"
+                            },
+                            "cumulative_cardinality": 0,
+                            "operator_type": "PROJECTION",
+                            "operator_cardinality": 104,
+                            "cumulative_rows_scanned": 0,
+                            "operator_rows_scanned": 0,
+                            "operator_timing": 0.00011454299999999999,
+                            "children": [
+                                {
+                                    "total_bytes_written": 0,
+                                    "total_bytes_read": 0,
+                                    "result_set_size": 3328,
+                                    "operator_name": "HASH_JOIN",
+                                    "cpu_time": 0.0,
+                                    "extra_info": {
+                                        "Join Type": "INNER",
+                                        "Conditions": "id = person_role_id",
+                                        "Estimated Cardinality": "1123"
+                                    },
+                                    "cumulative_cardinality": 0,
+                                    "operator_type": "HASH_JOIN",
+                                    "operator_cardinality": 104,
+                                    "cumulative_rows_scanned": 0,
+                                    "operator_rows_scanned": 0,
+                                    "operator_timing": 0.058659461999999996,
+                                    "children": [
+                                        {
+                                            "total_bytes_written": 0,
+                                            "total_bytes_read": 0,
+                                            "result_set_size": 49849272,
+                                            "operator_name": "SEQ_SCAN ",
+                                            "cpu_time": 0.0,
+                                            "extra_info": {
+                                                "Table": "char_name",
+                                                "Type": "Sequential Scan",
+                                                "Projections": [
+                                                    "id",
+                                                    "name"
+                                                ],
+                                                "Estimated Cardinality": "3140339"
+                                            },
+                                            "cumulative_cardinality": 0,
+                                            "operator_type": "TABLE_SCAN",
+                                            "operator_cardinality": 2077053,
+                                            "cumulative_rows_scanned": 0,
+                                            "operator_rows_scanned": 81648814,
+                                            "operator_timing": 0.307375254,
+                                            "children": []
+                                        },
+                                        {
+                                            "total_bytes_written": 0,
+                                            "total_bytes_read": 0,
+                                            "result_set_size": 3584,
+                                            "operator_name": "HASH_JOIN",
+                                            "cpu_time": 0.0,
+                                            "extra_info": {
+                                                "Join Type": "INNER",
+                                                "Conditions": "company_type_id = id",
+                                                "Estimated Cardinality": "1119"
+                                            },
+                                            "cumulative_cardinality": 0,
+                                            "operator_type": "HASH_JOIN",
+                                            "operator_cardinality": 112,
+                                            "cumulative_rows_scanned": 0,
+                                            "operator_rows_scanned": 0,
+                                            "operator_timing": 0.0023408630000000008,
+                                            "children": [
+                                                {
+                                                    "total_bytes_written": 0,
+                                                    "total_bytes_read": 0,
+                                                    "result_set_size": 4480,
+                                                    "operator_name": "HASH_JOIN",
+                                                    "cpu_time": 0.0,
+                                                    "extra_info": {
+                                                        "Join Type": "INNER",
+                                                        "Conditions": "role_id = id",
+                                                        "Estimated Cardinality": "1119"
+                                                    },
+                                                    "cumulative_cardinality": 0,
+                                                    "operator_type": "HASH_JOIN",
+                                                    "operator_cardinality": 112,
+                                                    "cumulative_rows_scanned": 0,
+                                                    "operator_rows_scanned": 0,
+                                                    "operator_timing": 0.0026950249999999998,
+                                                    "children": [
+                                                        {
+                                                            "total_bytes_written": 0,
+                                                            "total_bytes_read": 0,
+                                                            "result_set_size": 4480,
+                                                            "operator_name": "HASH_JOIN",
+                                                            "cpu_time": 0.0,
+                                                            "extra_info": {
+                                                                "Join Type": "INNER",
+                                                                "Conditions": "movie_id = id",
+                                                                "Estimated Cardinality": "13429"
+                                                            },
+                                                            "cumulative_cardinality": 0,
+                                                            "operator_type": "HASH_JOIN",
+                                                            "operator_cardinality": 112,
+                                                            "cumulative_rows_scanned": 0,
+                                                            "operator_rows_scanned": 0,
+                                                            "operator_timing": 0.013814452999999996,
+                                                            "children": [
+                                                                {
+                                                                    "total_bytes_written": 0,
+                                                                    "total_bytes_read": 0,
+                                                                    "result_set_size": 620664,
+                                                                    "operator_name": "FILTER",
+                                                                    "cpu_time": 0.0,
+                                                                    "extra_info": {
+                                                                        "Expression": "(movie_id BETWEEN 2 AND 2525745)",
+                                                                        "Estimated Cardinality": "7248868"
+                                                                    },
+                                                                    "cumulative_cardinality": 0,
+                                                                    "operator_type": "FILTER",
+                                                                    "operator_cardinality": 25861,
+                                                                    "cumulative_rows_scanned": 0,
+                                                                    "operator_rows_scanned": 0,
+                                                                    "operator_timing": 0.012254565999999996,
+                                                                    "children": [
+                                                                        {
+                                                                            "total_bytes_written": 0,
+                                                                            "total_bytes_read": 0,
+                                                                            "result_set_size": 620664,
+                                                                            "operator_name": "SEQ_SCAN ",
+                                                                            "cpu_time": 0.0,
+                                                                            "extra_info": {
+                                                                                "Table": "cast_info",
+                                                                                "Type": "Sequential Scan",
+                                                                                "Projections": [
+                                                                                    "movie_id",
+                                                                                    "person_role_id",
+                                                                                    "role_id"
+                                                                                ],
+                                                                                "Filters": "contains(note, '(voice)') AND contains(note, '(uncredited)')",
+                                                                                "Estimated Cardinality": "7248868"
+                                                                            },
+                                                                            "cumulative_cardinality": 0,
+                                                                            "operator_type": "TABLE_SCAN",
+                                                                            "operator_cardinality": 25861,
+                                                                            "cumulative_rows_scanned": 0,
+                                                                            "operator_rows_scanned": 5509140288,
+                                                                            "operator_timing": 0.652182723,
+                                                                            "children": []
+                                                                        }
+                                                                    ]
+                                                                },
+                                                                {
+                                                                    "total_bytes_written": 0,
+                                                                    "total_bytes_read": 0,
+                                                                    "result_set_size": 145248,
+                                                                    "operator_name": "HASH_JOIN",
+                                                                    "cpu_time": 0.0,
+                                                                    "extra_info": {
+                                                                        "Join Type": "INNER",
+                                                                        "Conditions": "id = movie_id",
+                                                                        "Estimated Cardinality": "3731"
+                                                                    },
+                                                                    "cumulative_cardinality": 0,
+                                                                    "operator_type": "HASH_JOIN",
+                                                                    "operator_cardinality": 4539,
+                                                                    "cumulative_rows_scanned": 0,
+                                                                    "operator_rows_scanned": 0,
+                                                                    "operator_timing": 0.023859345000000004,
+                                                                    "children": [
+                                                                        {
+                                                                            "total_bytes_written": 0,
+                                                                            "total_bytes_read": 0,
+                                                                            "result_set_size": 24250896,
+                                                                            "operator_name": "FILTER",
+                                                                            "cpu_time": 0.0,
+                                                                            "extra_info": {
+                                                                                "Expression": "(id BETWEEN 2 AND 2525745)",
+                                                                                "Estimated Cardinality": "505662"
+                                                                            },
+                                                                            "cumulative_cardinality": 0,
+                                                                            "operator_type": "FILTER",
+                                                                            "operator_cardinality": 1010454,
+                                                                            "cumulative_rows_scanned": 0,
+                                                                            "operator_rows_scanned": 0,
+                                                                            "operator_timing": 0.0038872659999999995,
+                                                                            "children": [
+                                                                                {
+                                                                                    "total_bytes_written": 0,
+                                                                                    "total_bytes_read": 0,
+                                                                                    "result_set_size": 24250896,
+                                                                                    "operator_name": "SEQ_SCAN ",
+                                                                                    "cpu_time": 0.0,
+                                                                                    "extra_info": {
+                                                                                        "Table": "title",
+                                                                                        "Type": "Sequential Scan",
+                                                                                        "Projections": [
+                                                                                            "id",
+                                                                                            "title"
+                                                                                        ],
+                                                                                        "Filters": "production_year>2005",
+                                                                                        "Estimated Cardinality": "505662"
+                                                                                    },
+                                                                                    "cumulative_cardinality": 0,
+                                                                                    "operator_type": "TABLE_SCAN",
+                                                                                    "operator_cardinality": 1010454,
+                                                                                    "cumulative_rows_scanned": 0,
+                                                                                    "operator_rows_scanned": 53094552,
+                                                                                    "operator_timing": 0.098516929,
+                                                                                    "children": []
+                                                                                }
+                                                                            ]
+                                                                        },
+                                                                        {
+                                                                            "total_bytes_written": 0,
+                                                                            "total_bytes_read": 0,
+                                                                            "result_set_size": 210960,
+                                                                            "operator_name": "HASH_JOIN",
+                                                                            "cpu_time": 0.0,
+                                                                            "extra_info": {
+                                                                                "Join Type": "INNER",
+                                                                                "Conditions": "company_id = id",
+                                                                                "Estimated Cardinality": "14860"
+                                                                            },
+                                                                            "cumulative_cardinality": 0,
+                                                                            "operator_type": "HASH_JOIN",
+                                                                            "operator_cardinality": 8790,
+                                                                            "cumulative_rows_scanned": 0,
+                                                                            "operator_rows_scanned": 0,
+                                                                            "operator_timing": 0.011430292999999998,
+                                                                            "children": [
+                                                                                {
+                                                                                    "total_bytes_written": 0,
+                                                                                    "total_bytes_read": 0,
+                                                                                    "result_set_size": 53593680,
+                                                                                    "operator_name": "SEQ_SCAN ",
+                                                                                    "cpu_time": 0.0,
+                                                                                    "extra_info": {
+                                                                                        "Table": "movie_companies",
+                                                                                        "Type": "Sequential Scan",
+                                                                                        "Projections": [
+                                                                                            "movie_id",
+                                                                                            "company_id",
+                                                                                            "company_type_id"
+                                                                                        ],
+                                                                                        "Estimated Cardinality": "2609129"
+                                                                                    },
+                                                                                    "cumulative_cardinality": 0,
+                                                                                    "operator_type": "TABLE_SCAN",
+                                                                                    "operator_cardinality": 2233070,
+                                                                                    "cumulative_rows_scanned": 0,
+                                                                                    "operator_rows_scanned": 57400838,
+                                                                                    "operator_timing": 0.020250937000000004,
+                                                                                    "children": []
+                                                                                },
+                                                                                {
+                                                                                    "total_bytes_written": 0,
+                                                                                    "total_bytes_read": 0,
+                                                                                    "result_set_size": 10888,
+                                                                                    "operator_name": "SEQ_SCAN ",
+                                                                                    "cpu_time": 0.0,
+                                                                                    "extra_info": {
+                                                                                        "Table": "company_name",
+                                                                                        "Type": "Sequential Scan",
+                                                                                        "Projections": "id",
+                                                                                        "Filters": "country_code='[ru]'",
+                                                                                        "Estimated Cardinality": "1328"
+                                                                                    },
+                                                                                    "cumulative_cardinality": 0,
+                                                                                    "operator_type": "TABLE_SCAN",
+                                                                                    "operator_cardinality": 1361,
+                                                                                    "cumulative_rows_scanned": 0,
+                                                                                    "operator_rows_scanned": 469994,
+                                                                                    "operator_timing": 0.0040618519999999995,
+                                                                                    "children": []
+                                                                                }
+                                                                            ]
+                                                                        }
+                                                                    ]
+                                                                }
+                                                            ]
+                                                        },
+                                                        {
+                                                            "total_bytes_written": 0,
+                                                            "total_bytes_read": 0,
+                                                            "result_set_size": 8,
+                                                            "operator_name": "FILTER",
+                                                            "cpu_time": 0.0,
+                                                            "extra_info": {
+                                                                "Expression": "(id <= 11)",
+                                                                "Estimated Cardinality": "1"
+                                                            },
+                                                            "cumulative_cardinality": 0,
+                                                            "operator_type": "FILTER",
+                                                            "operator_cardinality": 1,
+                                                            "cumulative_rows_scanned": 0,
+                                                            "operator_rows_scanned": 0,
+                                                            "operator_timing": 0.000043831,
+                                                            "children": [
+                                                                {
+                                                                    "total_bytes_written": 0,
+                                                                    "total_bytes_read": 0,
+                                                                    "result_set_size": 8,
+                                                                    "operator_name": "SEQ_SCAN ",
+                                                                    "cpu_time": 0.0,
+                                                                    "extra_info": {
+                                                                        "Table": "role_type",
+                                                                        "Type": "Sequential Scan",
+                                                                        "Projections": "id",
+                                                                        "Filters": "role='actor'",
+                                                                        "Estimated Cardinality": "1"
+                                                                    },
+                                                                    "cumulative_cardinality": 0,
+                                                                    "operator_type": "TABLE_SCAN",
+                                                                    "operator_cardinality": 1,
+                                                                    "cumulative_rows_scanned": 0,
+                                                                    "operator_rows_scanned": 12,
+                                                                    "operator_timing": 0.000042063,
+                                                                    "children": []
+                                                                }
+                                                            ]
+                                                        }
+                                                    ]
+                                                },
+                                                {
+                                                    "total_bytes_written": 0,
+                                                    "total_bytes_read": 0,
+                                                    "result_set_size": 16,
+                                                    "operator_name": "SEQ_SCAN ",
+                                                    "cpu_time": 0.0,
+                                                    "extra_info": {
+                                                        "Table": "company_type",
+                                                        "Type": "Sequential Scan",
+                                                        "Projections": "id",
+                                                        "Filters": "id<=2",
+                                                        "Estimated Cardinality": "4"
+                                                    },
+                                                    "cumulative_cardinality": 0,
+                                                    "operator_type": "TABLE_SCAN",
+                                                    "operator_cardinality": 2,
+                                                    "cumulative_rows_scanned": 0,
+                                                    "operator_rows_scanned": 4,
+                                                    "operator_timing": 0.000021221,
+                                                    "children": []
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

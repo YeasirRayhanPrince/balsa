@@ -182,6 +182,60 @@ def test_join_order_benchmark_w_diff_engine(engine='postgres', true_card=None):
         traceback.print_exc()
         return False
 
+
+def test_sql_storm_benchmark(engine='postgres', true_card=None):
+    """Test SQLSTORM benchmark with different engine."""
+    print("\n" + "="*60)
+    print("Testing SQL Storm Benchmark")
+    print("="*60)
+
+    try:
+        from sql_parse import JoinOrderBenchmark, WorkloadParams
+        
+        print(f"1. Configure WorkloadParams with {engine} engine...")
+        
+        # Validate engine
+        validate_engine(engine)
+        
+        try:
+            print(f"\n   Creating WorkloadParams with {engine} engine...")
+            params = WorkloadParams(
+                query_dir="/ssd_root/yrayhan/balsa/queries/join-order-benchmark-sql-storm",
+                engine=engine,
+                true_card=true_card
+            )
+            print(f"   WorkloadParams created:")
+            print(f"     engine: {params.engine}")
+            print(f"     query_dir: {params.query_dir}")
+            
+            print(f"\n   Initializing SQL Storm Benchmark with {engine} engine...")
+            
+            job = JoinOrderBenchmark(params)
+            
+            print(f"✅ SQL Storm Benchmark created successfully with {engine} engine!")
+            print(f"\nWorkload info:")
+            print(job.workload_info)
+            print(f"\nFirst 2 query nodes:")
+            for _ in job.query_nodes[:2]:
+                # print(_)
+                print(_.print_tree(true_card=True))
+        except Exception as e:
+            import traceback
+            print(f"\n❌ Detailed error in SQL Storm Benchmark initialization:")
+            print(f"Error type: {type(e).__name__}")
+            print(f"Error message: {str(e)}")
+            print("\nFull traceback:")
+            traceback.print_exc()
+            raise e
+        return True
+        
+    except Exception as e:
+        import traceback
+        print(f"\nSQL Storm Benchmark test failed: {e}")
+        print("Full traceback:")
+        traceback.print_exc()
+        return False
+    
 def main():
     """Run all tests with command-line argument support."""
     # Set up argument parser
@@ -212,12 +266,16 @@ def main():
     
     # Test 3: JoinOrderBenchmark
     # success &= test_join_order_benchmark()
-
-    # Test 4: JoinOrderBenchmark with different engine
-    success &= test_join_order_benchmark_w_diff_engine(
+    success &= test_sql_storm_benchmark(
         engine=args.engine, 
         true_card=args.true_card
         )
+    
+    # Test 4: JoinOrderBenchmark with different engine
+    # success &= test_join_order_benchmark_w_diff_engine(
+    #     engine=args.engine, 
+    #     true_card=args.true_card
+    #     )
     
     # Summary
     print("\n" + "="*80)
@@ -233,6 +291,8 @@ def main():
     print("="*80)
     
     return 0 if success else 1
+
+
 
 if __name__ == "__main__":
     exit_code = main()

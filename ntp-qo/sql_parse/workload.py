@@ -3,6 +3,7 @@ import logging
 import os
 import copy
 import collections
+import pickle
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -18,7 +19,7 @@ def ParseSqlToNode(path, engine, true_card=None):
     if engine == 'postgres':
       node, json_dict = postgres.SqlToPlanNode(sql_string, true_card=true_card)
     elif engine == 'duckdb':
-      node, json_dict = duckdb.SqlToPlanNode(sql_string)
+      node, json_dict = duckdb.SqlToPlanNode(sql_string, true_card=true_card)
     elif engine == 'mysql':
       node, json_dict = mysql.SqlToPlanNode(sql_string, true_card=true_card)
     else:
@@ -146,8 +147,42 @@ class JoinOrderBenchmark(Workload):
     
     super().__init__(params)
     p = params
-    logging.info('Load queries.')
-    self.query_nodes, self.train_nodes, self.test_nodes = self._LoadQueries()
+    # Create filename based on engine and cardinality setting
+    engine = p.engine
+    true_card_suffix = "_with_true_card" if p.true_card else "_no_true_card"
+    filename = f"query_plans_{engine}{true_card_suffix}.pkl"
+    
+    # Check if pickle file exists
+    os.makedirs('data', exist_ok=True)
+    filepath = os.path.join('data', filename)
+    
+    if os.path.exists(filepath):
+        logging.info(f'Loading cached query plans from {filepath}')
+        with open(filepath, 'rb') as f:
+            cached_data = pickle.load(f)
+        
+        self.query_nodes = cached_data['query_nodes']
+        self.train_nodes = cached_data['train_nodes']
+        self.test_nodes = cached_data['test_nodes']
+        logging.info(f'Loaded {len(self.query_nodes)} queries from cache')
+    else:
+        logging.info('Load queries from SQL files.')
+        self.query_nodes, self.train_nodes, self.test_nodes = self._LoadQueries()
+        
+        # Save query plans to pickle file for future use
+        data_to_save = {
+            'query_nodes': self.query_nodes,
+            'train_nodes': self.train_nodes, 
+            'test_nodes': self.test_nodes,
+            'engine': p.engine,
+            'true_card': p.true_card
+        }
+        
+        with open(filepath, 'wb') as f:
+            pickle.dump(data_to_save, f)
+            
+        logging.info(f"Saved query plans to {filepath}")
+    
     logging.info('Build schema information and physical ops.')
     self.workload_info = WorkloadInfo(self.query_nodes)
     self.workload_info.SetPhysicalOps(p.search_space_join_ops, p.search_space_scan_ops)
@@ -174,10 +209,17 @@ class JoinOrderBenchmark(Workload):
         print(f"\n=== Node for {sqlfile} ===")
         print(node)  # Uses the __str__ method (calls to_str())
         node.print_tree()
+        print(f"Actual rows: {node.count_actual_rows()}, Estimated rows: {node.count_estimated_rows()}")
         
         all_nodes.append(node)
     else:
-      all_nodes = [ParseSqlToNode(sqlfile, p.engine, p.true_card) for sqlfile in all_sql_list]
+      # all_nodes = [ParseSqlToNode(sqlfile, p.engine, p.true_card) for sqlfile in all_sql_list]
+      all_nodes = []
+      for sqlfile in all_sql_list:
+        print(f"Parsing query: {sqlfile}")
+        node = ParseSqlToNode(sqlfile, p.engine, p.true_card)
+        all_nodes.append(node)
+        print(f"✅ Completed: {sqlfile}")
     # ******************************* This is where the magic happens ***********************
 
     train_nodes = [

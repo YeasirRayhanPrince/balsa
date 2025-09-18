@@ -320,7 +320,7 @@ class Node(object):
         query_hint = '\n '.join(atoms)
         return '/*+ ' + query_hint + ' */'
 
-    def print_tree(self, prefix="", is_last=True, true_card=None, estimated_card=None, actual_time_ms=None):
+    def print_tree(self, prefix="", is_last=True, true_card=True, estimated_card=True, actual_time_ms=True):
         """Print node in a tree-like format with detailed information."""
         connector = "└── " if is_last else "├── "
         
@@ -364,6 +364,32 @@ class Node(object):
 
     def __lt__(self, other):
         return str(self) < str(other)
+
+    def count_estimated_rows(self):
+        """Count total estimated rows across all nodes in the AST tree."""
+        total = 0
+        
+        def _count(node):
+            nonlocal total
+            estimated_rows = node.info.get('estimated_rows')
+            if estimated_rows is not None:
+                total += estimated_rows
+        
+        MapNode(self, _count)
+        return total
+    
+    def count_actual_rows(self):
+        """Count total actual rows across all nodes in the AST tree.""" 
+        total = 0
+        
+        def _count(node):
+            nonlocal total
+            actual_rows = node.info.get('actual_rows')
+            if actual_rows is not None:
+                total += actual_rows
+        
+        MapNode(self, _count)
+        return total
 
 
 

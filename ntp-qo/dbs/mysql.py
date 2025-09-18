@@ -60,11 +60,12 @@ def SqlToPlanNode(sql,
     try:
         transformed_sql = _transform_sql_for_mysql(sql)
         
-        # MySQL EXPLAIN ANALYZE syntax - returns text format
-        if true_card is not None:
+        if true_card:
             explain_sql = f"EXPLAIN ANALYZE {transformed_sql}"
         else:
-            explain_sql = f"EXPLAIN (FORMAT TREE) {transformed_sql}"
+            
+            explain_sql = f"EXPLAIN FORMAT=TREE {transformed_sql}"
+        
         if verbose:
             logging.info(f"Executing: {explain_sql}")
 
@@ -90,11 +91,11 @@ def SqlToPlanNode(sql,
             text_lines = [f"Error: {str(e)}"]
         
         # Parse the text-based tree format
-        print(text_lines)
+        # print(text_lines)
         node = _parse_mysql_text_plan(text_lines)
         json_dict = {"mysql_text_plan": text_lines}
         print(node.print_tree())
-        print(json_dict)
+        # print(json_dict)
         if not keep_scans_joins_only:
             return node, json_dict
         return plans_lib.FilterScansOrJoins(node), json_dict
@@ -160,6 +161,13 @@ def _transform_sql_for_mysql(sql):
         replacement = r'`\1`\2'
         transformed = re.sub(pattern, replacement, transformed, flags=re.IGNORECASE)
     
+    # Step 3: Quote column aliases in SELECT clauses
+    for reserved in reserved_aliases:
+        # Match pattern like "expression AS reserved_word" and replace with "expression AS `reserved_word`"
+        pattern = r'\bAS\s+(' + re.escape(reserved) + r')\b'
+        replacement = r'AS `\1`'
+        transformed = re.sub(pattern, replacement, transformed, flags=re.IGNORECASE)
+    
     return transformed
 
 
@@ -171,10 +179,10 @@ def _parse_mysql_text_plan(text_lines):
         return _create_fallback_node({})
     
     # Debug: print lines to understand format
-    print("=== PARSING MYSQL LINES ===")
-    for i, line in enumerate(text_lines):
-        print(f"Line {i}: '{line}'")
-    print("=== END LINES ===")
+    # print("=== PARSING MYSQL LINES ===")
+    # for i, line in enumerate(text_lines):
+    #     print(f"Line {i}: '{line}'")
+    # print("=== END LINES ===")
     
     # Build tree structure from indented text
     nodes_stack = []
@@ -195,11 +203,11 @@ def _parse_mysql_text_plan(text_lines):
             
         indent_level = arrow_pos // 4  # Assuming 4-space indents
         
-        print(f"Line {line_num}: indent_level={indent_level}, line='{line.strip()}'")
+        # print(f"Line {line_num}: indent_level={indent_level}, line='{line.strip()}'")
         
         # Parse the operation line
         node = _parse_mysql_operation_line(line)
-        print(f"  -> Created node: {node.node_type}, cost={node.cost}")
+        # print(f"  -> Created node: {node.node_type}, cost={node.cost}")
         
         # Handle tree structure
         if root_node is None:
@@ -216,12 +224,12 @@ def _parse_mysql_text_plan(text_lines):
             if nodes_stack:
                 parent = nodes_stack[-1]
                 parent.children.append(node)
-                print(f"  -> Added as child of: {parent.node_type}")
+                # print(f"  -> Added as child of: {parent.node_type}")
             
             # Push current node to stack for potential children
             nodes_stack.append(node)
     
-    print(f"=== FINAL ROOT: {root_node.node_type if root_node else 'None'} ===")
+    # print(f"=== FINAL ROOT: {root_node.node_type if root_node else 'None'} ===")
     return root_node if root_node else _create_fallback_node({})
 
 
@@ -257,11 +265,25 @@ def _parse_mysql_operation_line(line):
     else:
         node.cost = 1000.0
     
+    # Set estimated rows if available (consistent with PostgreSQL format)
+    if rows_match:
+        try:
+            node.info['estimated_rows'] = float(rows_match.group(1))
+        except ValueError:
+            pass
+    
     # Set actual time if available
     if actual_time_match:
         try:
             actual_time = float(actual_time_match.group(2))  # End time
             node.actual_time_ms = actual_time
+        except ValueError:
+            pass
+    
+    # Set actual rows if available (consistent with PostgreSQL format)
+    if actual_rows_match:
+        try:
+            node.info['actual_rows'] = int(actual_rows_match.group(1))
         except ValueError:
             pass
     
@@ -278,7 +300,7 @@ def _parse_mysql_operation_line(line):
         node.table_alias = index_match.group(1)
     
     # Store MySQL-specific info
-    node.info['database_system'] = 'mysql'
+    node.info['engine'] = 'mysql'
     node.info['mysql_operation'] = operation_name
     node.info['mysql_line'] = line.strip()
     

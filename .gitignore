@@ -29,3 +29,5 @@ tensorboard_logs/
 tensorboard_logs_/
 balsa_jobrandsplit_analysis.md
 *.txt
+queries/*
+

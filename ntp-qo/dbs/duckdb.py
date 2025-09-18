@@ -49,7 +49,8 @@ def SqlToPlanNode(sql,
                   comment=None,
                   verbose=False,
                   keep_scans_joins_only=False,
-                  connection=None):
+                  connection=None,
+                  true_card=False):
     """Issues EXPLAIN on a SQL string; parse into our AST node."""
     
     # Setup database and connection
@@ -62,25 +63,53 @@ def SqlToPlanNode(sql,
         # Transform SQL for DuckDB compatibility
         transformed_sql = _transform_sql_for_duckdb(sql)
         
-        # DuckDB EXPLAIN syntax - use JSON format for rich structured data
-        explain_sql = f"EXPLAIN (FORMAT JSON) {transformed_sql}"
+        # DuckDB EXPLAIN syntax - use ANALYZE for true cardinalities
+        if true_card:
+            explain_sql = f"EXPLAIN (ANALYZE, FORMAT JSON) {transformed_sql}"
+        else:
+            explain_sql = f"EXPLAIN (FORMAT JSON) {transformed_sql}"
+        
         if verbose:
             logging.info(f"Executing: {explain_sql}")
         
         try:
             result = conn.execute(explain_sql).fetchall()
-            # DuckDB EXPLAIN (FORMAT JSON) returns the JSON in the second column
-            if result and len(result[0]) > 1:
-                json_text = result[0][1]  # Get the JSON text
-                import json
-                json_dict = json.loads(json_text)
+            
+            if true_card:
+                # EXPLAIN ANALYZE returns JSON directly
+                # Check if result contains JSON
+                if result and len(result) > 0:
+                    # DuckDB EXPLAIN ANALYZE can return different formats
+                    # Try to find JSON in the result
+                    json_text = None
+                    for row in result:
+                        for col in row:
+                            if isinstance(col, str) and (col.strip().startswith('{') or col.strip().startswith('[')):
+                                json_text = col
+                                break
+                        if json_text:
+                            break
+                    
+                    if json_text:
+                        try:
+                            json_dict = json.loads(json_text)
+                        except json.JSONDecodeError:
+                            # Fallback to text parsing
+                            explain_text = '\n'.join([str(row[0]) for row in result])
+                            json_dict = _parse_duckdb_text_explain(explain_text)
+                    else:
+                        # No JSON found, parse as text
+                        explain_text = '\n'.join([str(row[0]) for row in result])
+                        json_dict = _parse_duckdb_text_explain(explain_text)
+                else:
+                    raise Exception("No result from EXPLAIN ANALYZE")
             else:
-                # Fallback if format is unexpected
+                # Regular EXPLAIN - parse text output
                 explain_text = '\n'.join([str(row[0]) for row in result])
                 json_dict = _parse_duckdb_text_explain(explain_text)
             
             if verbose:
-                logging.info(f"DuckDB JSON plan structure: {json.dumps(json_dict, indent=2)}")
+                logging.info(f"DuckDB plan structure: {json.dumps(json_dict, indent=2) if isinstance(json_dict, dict) else str(json_dict)}")
                 
         except Exception as e:
             logging.error(f"EXPLAIN failed: {e}, {sql}")
@@ -94,10 +123,13 @@ def SqlToPlanNode(sql,
                 }
             }
         
-        # Parse into our Node structure - handle both JSON and fallback formats
-        if isinstance(json_dict, list) and len(json_dict) > 0:
+        # Parse into our Node structure - handle DuckDB EXPLAIN ANALYZE JSON format
+        if isinstance(json_dict, dict) and 'children' in json_dict:
+            # DuckDB EXPLAIN ANALYZE JSON format: single root object with children
+            node = ParseDuckdbPlanJson(json_dict, true_card=true_card)
+        elif isinstance(json_dict, list) and len(json_dict) > 0:
             # DuckDB JSON format: array of plan nodes
-            node = ParseDuckdbPlanJson(json_dict[0])  # Start with root node
+            node = ParseDuckdbPlanJson(json_dict[0], true_card=true_card)
         else:
             # Fallback text format
             node = ParseDuckDBPlanJson(json_dict)
@@ -168,29 +200,53 @@ def _transform_sql_for_duckdb(sql):
     return transformed
 
 
-def ParseDuckdbPlanJson(json_node):
+def ParseDuckdbPlanJson(json_node, true_card=False):
     """Parse DuckDB JSON plan node into our AST Node structure."""
     
-    print(json_node)
 
-    node_name = json_node.get('name', 'Unknown')
-    extra_info = json_node.get('extra_info', {})
+    # Handle different DuckDB JSON formats
+    if 'operator_name' in json_node:
+        # DuckDB EXPLAIN ANALYZE format
+        node_name = json_node.get('operator_name', 'Unknown')
+        operator_type = json_node.get('operator_type', node_name)
+        extra_info = json_node.get('extra_info', {})
+    else:
+        # Legacy format
+        node_name = json_node.get('name', 'Unknown')
+        operator_type = node_name
+        extra_info = json_node.get('extra_info', {})
     
     # Create our Node
     node = plans_lib.Node(node_name)
     
-    # Extract cost information - use cardinality as cost estimate
-    estimated_cardinality = extra_info.get('Estimated Cardinality')
-    if estimated_cardinality:
-        try:
-            cardinality = int(estimated_cardinality)
-            # Use log scale to convert cardinality to reasonable cost
-            import math
-            node.cost = math.log10(max(cardinality, 1)) * 1000.0
-        except (ValueError, TypeError):
-            node.cost = 1000.0
+    # Extract cost information
+    if true_card:
+        # For EXPLAIN ANALYZE, use actual timing as cost
+        timing = json_node.get('operator_timing', 0.0)
+        if timing > 0:
+            # Convert seconds to milliseconds and use as cost
+            node.cost = timing * 1000.0
+        else:
+            # Fallback to cardinality-based cost
+            cardinality = json_node.get('operator_cardinality', 0)
+            if cardinality > 0:
+                import math
+                node.cost = math.log10(max(cardinality, 1)) * 1000.0
+            else:
+                node.cost = 1000.0
     else:
-        node.cost = 1000.0
+        # For regular EXPLAIN, use estimated cardinality
+        estimated_cardinality = extra_info.get('Estimated Cardinality')
+        if estimated_cardinality:
+            try:
+                cardinality = int(estimated_cardinality) if isinstance(estimated_cardinality, str) else estimated_cardinality
+                # Use log scale to convert cardinality to reasonable cost
+                import math
+                node.cost = math.log10(max(cardinality, 1)) * 1000.0
+            except (ValueError, TypeError):
+                node.cost = 1000.0
+        else:
+            node.cost = 1000.0
     
     # Extract table information for scan nodes
     if 'Table' in extra_info:
@@ -201,6 +257,32 @@ def ParseDuckdbPlanJson(json_node):
     # Store additional information
     node.info['duckdb_extra'] = extra_info
     node.info['database_system'] = 'duckdb'
+    node.info['explain_json'] = json_node
+    
+    # Add cardinality information (similar to MySQL/PostgreSQL format)
+    if true_card:
+        # Actual execution statistics
+        actual_cardinality = json_node.get('operator_cardinality')
+        if actual_cardinality is not None:
+            node.info['actual_rows'] = actual_cardinality
+            
+        # Also capture estimated for comparison
+        estimated_cardinality = extra_info.get('Estimated Cardinality')
+        if estimated_cardinality is not None:
+            try:
+                estimated_int = int(estimated_cardinality) if isinstance(estimated_cardinality, str) else estimated_cardinality
+                node.info['estimated_rows'] = estimated_int
+            except (ValueError, TypeError):
+                pass
+    else:
+        # Just estimated rows for regular EXPLAIN
+        estimated_cardinality = extra_info.get('Estimated Cardinality')
+        if estimated_cardinality is not None:
+            try:
+                estimated_int = int(estimated_cardinality) if isinstance(estimated_cardinality, str) else estimated_cardinality
+                node.info['estimated_rows'] = estimated_int
+            except (ValueError, TypeError):
+                pass
     
     # Add filters if present - ensure it's a string
     if 'Filters' in extra_info:
@@ -208,16 +290,28 @@ def ParseDuckdbPlanJson(json_node):
         # Ensure filter is always a string for compatibility with regex parsing
         node.info['filter'] = str(filter_value) if filter_value is not None else None
     
+    # Add expression filters (DuckDB EXPLAIN ANALYZE format)
+    if 'Expression' in extra_info:
+        expression_value = extra_info['Expression']
+        node.info['filter'] = str(expression_value) if expression_value is not None else None
+    
     # Add join information
     if 'Join Type' in extra_info:
         node.info['join_type'] = extra_info['Join Type']
     if 'Conditions' in extra_info:
         node.info['join_conditions'] = extra_info['Conditions']
     
+    # Add timing information for EXPLAIN ANALYZE
+    if true_card:
+        timing = json_node.get('operator_timing')
+        if timing is not None:
+            # Convert to milliseconds to match PostgreSQL format
+            node.actual_time_ms = timing * 1000.0
+    
     # Recursively parse children
     children = json_node.get('children', [])
     for child_json in children:
-        child_node = ParseDuckdbPlanJson(child_json)
+        child_node = ParseDuckdbPlanJson(child_json, true_card=true_card)
         node.children.append(child_node)
     
     return node

@@ -108,7 +108,7 @@ def SqlToPlanNode(sql,
     # Node.to_sql() returns a non-ambiguous SQL string).
     # Ref: https://www.postgresql.org/docs/11/sql-explain.html
     geqo_off = comment is not None and len(comment) > 0
-    if true_card is not None:
+    if true_card:
         result = _run_explain('explain (verbose, analyze, format json)',
                           sql,
                           comment,
@@ -333,6 +333,7 @@ def ParsePostgresPlanJson(json_dict):
                     c.table_name = curr_node.table_name
                     c.table_alias = curr_node.table_alias
 
+        curr_node.info['engine'] = 'mysql'
         return curr_node
 
     return _parse_pg(curr)
@@ -393,7 +394,7 @@ def GetAllTableNumRows(rel_names):
         'company_name': 234997,
         'company_type': 4,
         'complete_cast': 135086,
-        'info_type': 113,
+        'info_type': 113, 
         'keyword': 134170,
         'kind_type': 7,
         'link_type': 18,
